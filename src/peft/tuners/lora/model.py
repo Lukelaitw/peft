@@ -43,7 +43,7 @@ from peft.utils import (
     get_quantization_config,
 )
 #### Todo: import function of new methods here #### 
-from peft.utils.merge_utils import dare_linear, dare_ties, magnitude_prune, task_arithmetic, ties
+from peft.utils.merge_utils import dare_linear, dare_ties, magnitude_prune, task_arithmetic,sce ties,sce
 from peft.utils.other import get_pattern_key
 
 from .aqlm import dispatch_aqlm
@@ -146,15 +146,15 @@ class LoraModel(BaseTuner):
         A helper method to check the config when a new adapter is being added.
 
         Raise a ValueError if there is something wrong with the config or if it conflicts with existing adapters.
-
         """
-        # TODO: there should be a check if any of the existing adapters actually has bias != "none", or else the check
-        # does not fully correspond to the error message.
-        if (len(self.peft_config) > 1) and (config.bias != "none"):
-            raise ValueError(
-                f"{self.__class__.__name__} supports only 1 adapter with bias. When using multiple adapters, "
-                "set bias to 'none' for all adapters."
-            )
+        if config.bias != "none":
+            for existing in self.peft_config:
+
+                if getattr(existing, "bias", "none") != "none":
+                    raise ValueError(
+                        f"{self.__class__.__name__} supports only 1 adapter with bias. "
+                        "When using multiple adapters, set bias to 'none' for all adapters."
+                    )
 
     @staticmethod
     def _check_target_module_exists(lora_config, key):
@@ -557,7 +557,7 @@ class LoraModel(BaseTuner):
 
         adapters_ranks = [self.peft_config[adapter].r for adapter in adapters]
         #### Todo: remember to add func names of new methods here here ####
-        if combination_type in ("linear", "ties", "dare_ties", "dare_linear", "magnitude_prune"):
+        if combination_type in ("linear", "ties", "dare_ties", "dare_linear", "magnitude_prune","sce"):
             # all adapters ranks should be same, new rank is just this value
             if len(set(adapters_ranks)) != 1:
                 raise ValueError(
@@ -725,7 +725,7 @@ class LoraModel(BaseTuner):
                         driver=svd_driver,
                     )
                 #### Todo: remember to add func names of new methods here here ####
-                elif combination_type in ["linear", "ties", "dare_linear", "dare_ties", "magnitude_prune"]:
+                elif combination_type in ["linear", "ties", "dare_linear", "dare_ties", "magnitude_prune","sce"]:
                     target_lora_A.data, target_lora_B.data = self._generalized_task_arithmetic_weighted_adapter(
                         combination_type, adapters, weights, target, density, majority_sign_method
                     )
@@ -838,6 +838,8 @@ class LoraModel(BaseTuner):
                 lora_deltas[i] = dare_ties(task_tensors, valid_weights, density, majority_sign_method)
             elif combination_type == "magnitude_prune":
                 lora_deltas[i] = magnitude_prune(task_tensors, valid_weights, density)
+            elif combination_type == "sce":
+                lora_deltas[i] = sce(task_tensors, valid_weights, density)
             else:
                 raise ValueError("Invalid combination type")
         lora_deltas = [delta.to(dtype) for delta in lora_deltas]
