@@ -43,7 +43,7 @@ from peft.utils import (
     get_quantization_config,
 )
 #### Todo: import function of new methods here #### 
-from peft.utils.merge_utils import dare_linear, dare_ties, magnitude_prune, task_arithmetic,sce ties,sce
+from peft.utils.merge_utils import dare_linear, dare_ties, magnitude_prune, task_arithmetic, ties,sce
 from peft.utils.other import get_pattern_key
 
 from .aqlm import dispatch_aqlm
