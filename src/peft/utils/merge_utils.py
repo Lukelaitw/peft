@@ -232,6 +232,64 @@ def sce(task_tensors: List[torch.Tensor],
 """
 
 
+def sce(
+    task_tensors: List[torch.Tensor],
+    density: float = 1.0,
+    majority_sign_method: Literal["total", "frequency"] = "total",
+) -> torch.Tensor:
+    """
+    Merge the task tensors using the S‐C‐E algorithm:
+      S: select top-k variance elements across task tensors
+      C: compute merging coefficients from sum of squares
+      E: filter out elements whose sign disagrees with the majority sign
+
+    Args:
+        task_tensors (`List[torch.Tensor]`): The task tensors to merge.
+        density (`float`): Fraction of elements to keep by variance (0 < density ≤ 1).
+        majority_sign_method (`str`): "total" or "frequency" for electing sign.
+
+    Returns:
+        `torch.Tensor`: The merged tensor.
+    """
+    # Stack tasks: shape = (n_tasks, *param_shape)
+    stacked = torch.stack(task_tensors, dim=0)
+
+    # --- S: select by variance ---
+    # compute variance along the task dimension
+    var = torch.var(stacked, dim=0, unbiased=False)
+    flat_var = var.flatten()
+    k = max(1, int(density * flat_var.numel()))
+    # threshold = the k-th largest variance
+    kth_value = torch.topk(flat_var, k, largest=True).values[-1]
+    mask_S = (var >= kth_value).to(stacked.dtype)  # keep positions with high variance
+
+    # apply S‐mask
+    masked = stacked * mask_S
+
+    # --- C: coefficients from sum of squares ---
+    # sum of squares per task (only on masked positions)
+    sq_sums = (masked ** 2).view(stacked.size(0), -1).sum(dim=1)  # shape = (n_tasks,)
+    # normalize to get weights
+    total_sq = sq_sums.sum().clamp_min(1e-12)
+    coeffs = (sq_sums / total_sq).view(-1, *([1] * (stacked.dim() - 1)))
+
+    # weighted sum
+    merged = (masked * coeffs).sum(dim=0)
+
+    # --- E: filter minority‐direction elements ---
+    # compute majority sign on masked tasks
+    if majority_sign_method == "total":
+        sign_mag = masked.sum(dim=0)
+    else:  # "frequency"
+        sign_mag = masked.sign().sum(dim=0)
+    majority_sign = torch.where(sign_mag >= 0, 1.0, -1.0)
+
+    # zero out merged values whose sign ≠ majority_sign
+    merged = torch.where(merged.sign() == majority_sign, merged, torch.zeros_like(merged))
+
+    return merged
+
+
 def dare_linear(task_tensors: List[torch.Tensor], weights: torch.Tensor, density: float) -> torch.Tensor:
     """
     Merge the task tensors using `dare linear`.
